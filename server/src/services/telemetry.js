@@ -76,8 +76,12 @@ export function setDeviceOfflineState(deviceId, offline) {
 }
 
 export async function sendRelayCommand(deviceId, targetState, simulateTimeout = false) {
+  const requested = String(targetState || "").toUpperCase();
+  if (!deviceId || !["ON", "OFF"].includes(requested)) {
+    throw new Error("deviceId and relay state ON or OFF are required.");
+  }
   telemetryStats.relayCommandsSent += 1;
-  const state = String(targetState || "OFF").toUpperCase() === "ON" ? "ON" : "OFF";
+  const state = requested;
   const current = deviceHealth.get(deviceId) || {
     deviceId,
     relayState: "ON",

@@ -10,7 +10,13 @@ export function validateTelemetry(input) {
     throw new Error("deviceId is required and must be at most 80 characters.");
   }
 
-  const messageId = input.messageId ? String(input.messageId).trim().slice(0, 80) : null;
+  let messageId = null;
+  if (input.messageId !== undefined && input.messageId !== null) {
+    messageId = String(input.messageId).trim();
+    if (!messageId || messageId.length > 80) {
+      throw new Error("messageId must be non-empty and at most 80 characters.");
+    }
+  }
   const relayState = ["ON", "OFF"].includes(String(input.relayState || "").toUpperCase())
     ? String(input.relayState).toUpperCase()
     : "ON";

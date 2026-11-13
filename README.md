@@ -1,5 +1,5 @@
 # VoltWise
-**AI-assisted IoT Rule Engineering, Telemetry & Fault Verification Workbench**
+**IoT Rule Engineering, Telemetry & Fault Verification Workbench**
 
 VoltWise is a portfolio-grade prototype for ingesting simulated electrical telemetry, injecting communication faults, authoring constrained alert rules, and running automated verification checks.
 
@@ -7,17 +7,17 @@ It is designed around industrial electrical-monitoring concepts such as voltage,
 
 ## What works
 - **Telemetry Ingestion & Schema Guard:** REST and optional MQTT (`voltwise/telemetry/<deviceId>`) ingestion with strict bounds validation for voltage, current, power factor, THD, and energy.
-- **Idempotency & Deduplication:** Tracks `messageId` signatures to drop duplicate packet replays and prevent double-writes.
-- **Heartbeat & Recovery Monitoring:** Automatically flags devices `OFFLINE` after missed heartbeats (15s timeout) and measures exact recovery latency in milliseconds upon reconnection.
+- **Idempotency & Deduplication:** Rejects repeated non-empty `messageId` values during the current server process. The in-memory cache is bounded to 2,000 IDs; deduplication is not retained across restarts or shared between server instances.
+- **Heartbeat & Recovery Monitoring:** Reports devices `OFFLINE` after 15 seconds without telemetry and measures recovery time in milliseconds when telemetry resumes. These states are process-local and simulated.
 - **Fault Injection & Relay ACK Bench:** Interactive workbench to simulate link drops, duplicate replays, malformed packets, and relay command ACK timeouts.
-- **Automated 5-Step Verification Suite:** One-click test runner executing baseline ingestion, duplicate rejection, schema guard checks, relay timeout detection, and recovery timing.
+- **Automated 5-Step Verification Suite:** One-click runner checks baseline ingestion, duplicate rejection, schema guard behavior, simulated relay timeout detection, and heartbeat recovery timing.
 - **Bulk Device Onboarding:** CSV fleet import with row-level validation.
 - **Rule Authoring & Evaluation:** Constrained natural-language rule parser, rule DSL validation, deterministic evaluation, and trigger cooldown suppression.
-- **Flexible Persistence:** Optional MongoDB persistence with out-of-the-box local JSON fallback.
+- **Flexible Persistence:** Local JSON persistence by default, with optional MongoDB persistence when a reachable `MONGODB_URI` is configured. The local JSON store is not designed for concurrent multi-process writes.
 
 ## Safety and scope
-- All telemetry and relay responses are simulated unless you deliberately publish compatible MQTT test messages.
-- The natural-language rule helper only maps supported phrases to a constrained JSON rule format. It does not generate or execute arbitrary code.
+- Telemetry and relay responses are simulated. MQTT messages, when a broker is configured, are treated as test inputs; this does not establish compatibility with PM-01 or other physical hardware.
+- The rule sentence parser is a fixed, constrained pattern matcher. It is not LLM-powered and does not generate or execute arbitrary code.
 - Rules only create software alerts and simulated relay state changes. They do not control physical breakers or electrical equipment.
 - Example thresholds are demonstration values, not electrical safety or regulatory guidance.
 - This is an MVP/portfolio prototype. Add authentication, authorization, TLS, rate limits, and deployment hardening before production use.
@@ -49,7 +49,7 @@ Open:
 ## Demo workflow
 1. Start the app and open **Overview**.
 2. Click **Simulate 5 CCMS** to generate live telemetry packets for five virtual electrical units (`ccms-01` to `ccms-05`).
-3. Open **Fault & Verify** in the sidebar to test link drops (`Drop Heartbeat` / `Reconnect & Recover`), `Replay Duplicate`, `Invalid Packet`, and `Relay Timeout` scenarios.
+3. Open **Fault & Verify** in the sidebar to test simulated link drops (`Drop Heartbeat` / `Reconnect & Recover`), `Replay Duplicate`, `Invalid Packet`, and relay ACK timeout scenarios. The timeout is simulated immediately and reports the configured 3,000 ms threshold; it does not wait three seconds for a real device.
 4. Click **Run Verification Suite** in the top bar to execute all 5 automated protocol checks and view the Pass/Fail diagnostic report.
 5. Open **Rule studio** and create a rule using a supported sentence, for example:
    - `Alert when voltage is below 205 V`
@@ -82,7 +82,7 @@ The parser produces a constrained rule:
   "cooldownSeconds": 300
 }
 ```
-The backend validates the rule independently before saving or evaluating it.
+The backend validates the rule independently before saving or evaluating it. Parsing is deterministic and only supports the listed sentence pattern; it does not call an LLM.
 
 ## API overview
 - `GET /api/health`

@@ -25,3 +25,24 @@ test("validates telemetry schema and bounds", () => {
   assert.equal(reading.deviceId, "meter-1");
   assert.throws(() => validateTelemetry({ deviceId: "meter-1", voltage: 230, current: 4, powerFactor: 1.5, thd: 2, energyKwh: 100 }));
 });
+
+test("rejects empty or oversized message IDs instead of weakening deduplication", () => {
+  const base = { deviceId: "meter-1", voltage: 230, current: 4, powerFactor: 0.9, thd: 2, energyKwh: 100 };
+  assert.throws(() => validateTelemetry({ ...base, messageId: "   " }), /messageId/);
+  assert.throws(() => validateTelemetry({ ...base, messageId: "x".repeat(81) }), /messageId/);
+  assert.equal(validateTelemetry({ ...base, messageId: " packet-1 " }).messageId, "packet-1");
+});
+
+test("rejects non-finite telemetry and invalid timestamps", () => {
+  const base = { deviceId: "meter-1", voltage: 230, current: 4, powerFactor: 0.9, thd: 2, energyKwh: 100 };
+  assert.throws(() => validateTelemetry({ ...base, current: "Infinity" }), /finite number/);
+  assert.throws(() => validateTelemetry({ ...base, timestamp: "not-a-date" }), /valid date/);
+});
+
+test("natural-language parser enforces matching units and fixed comparisons", () => {
+  assert.equal(parseNaturalLanguageRule("Alert when THD is greater than 5 percent").operator, "gt");
+  assert.throws(() => parseNaturalLanguageRule("Alert when voltage is below 205 A"), /Unit does not match/);
+  const rule = validateRule({ field: "voltage", operator: "gte", threshold: 205 });
+  assert.equal(evaluateRule(rule, { voltage: 205 }), true);
+  assert.equal(evaluateRule(rule, { voltage: "invalid" }), false);
+});
