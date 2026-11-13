@@ -1,28 +1,26 @@
 # VoltWise
-**AI-assisted IoT Rule Engineering & Telemetry Workbench**
+**AI-assisted IoT Rule Engineering, Telemetry & Fault Verification Workbench**
 
-VoltWise is a portfolio-grade prototype for ingesting simulated electrical telemetry, authoring constrained alert rules, testing them against historical/simulated readings, and monitoring rule triggers.
+VoltWise is a portfolio-grade prototype for ingesting simulated electrical telemetry, injecting communication faults, authoring constrained alert rules, and running automated verification checks.
 
-It is designed around publicly described electrical-monitoring concepts such as voltage, current, power factor, THD and energy. It is **not connected to real PM-01 hardware** and does not use EazyIoT's private packet schema.
+It is designed around industrial electrical-monitoring concepts such as voltage, current, power factor, THD, energy, and relay state tracking. All telemetry and hardware responses are simulated in software.
 
 ## What works
-- REST telemetry ingestion with schema validation.
-- Optional MQTT subscriber (`voltwise/telemetry/<deviceId>`).
-- Simulated device generator for repeatable demo data.
-- Device list and latest readings.
-- Bulk device onboarding through CSV.
-- Rule authoring from a restricted natural-language template.
-- Rule DSL validation and deterministic evaluation.
-- Rule testing against recent telemetry and a generated simulation batch.
-- Trigger history and duplicate suppression cooldown.
-- Optional MongoDB persistence; local JSON persistence works out of the box.
+- **Telemetry Ingestion & Schema Guard:** REST and optional MQTT (`voltwise/telemetry/<deviceId>`) ingestion with strict bounds validation for voltage, current, power factor, THD, and energy.
+- **Idempotency & Deduplication:** Tracks `messageId` signatures to drop duplicate packet replays and prevent double-writes.
+- **Heartbeat & Recovery Monitoring:** Automatically flags devices `OFFLINE` after missed heartbeats (15s timeout) and measures exact recovery latency in milliseconds upon reconnection.
+- **Fault Injection & Relay ACK Bench:** Interactive workbench to simulate link drops, duplicate replays, malformed packets, and relay command ACK timeouts.
+- **Automated 5-Step Verification Suite:** One-click test runner executing baseline ingestion, duplicate rejection, schema guard checks, relay timeout detection, and recovery timing.
+- **Bulk Device Onboarding:** CSV fleet import with row-level validation.
+- **Rule Authoring & Evaluation:** Constrained natural-language rule parser, rule DSL validation, deterministic evaluation, and trigger cooldown suppression.
+- **Flexible Persistence:** Optional MongoDB persistence with out-of-the-box local JSON fallback.
 
 ## Safety and scope
-- All telemetry is simulated unless you deliberately publish your own compatible test messages.
-- The natural-language rule helper only maps supported phrases to a small JSON rule format. It does not generate or execute arbitrary code.
-- Rules only create software alerts. They do not control breakers, relays, or electrical equipment.
+- All telemetry and relay responses are simulated unless you deliberately publish compatible MQTT test messages.
+- The natural-language rule helper only maps supported phrases to a constrained JSON rule format. It does not generate or execute arbitrary code.
+- Rules only create software alerts and simulated relay state changes. They do not control physical breakers or electrical equipment.
 - Example thresholds are demonstration values, not electrical safety or regulatory guidance.
-- This is an MVP/portfolio prototype, not a production deployment. Add authentication, authorization, TLS, rate limits, observability, and deployment hardening before real use.
+- This is an MVP/portfolio prototype. Add authentication, authorization, TLS, rate limits, and deployment hardening before production use.
 
 ## Requirements
 - Node.js 20+
@@ -39,25 +37,26 @@ cp .env.example .env
 npm run dev
 ```
 
-Open:
-- Frontend: http://localhost:5173
-- API health: http://localhost:4000/api/health
-
 Windows PowerShell equivalent for copying env:
 ```powershell
 Copy-Item .env.example .env
 ```
 
+Open:
+- Frontend: http://localhost:5173
+- API health: http://localhost:4000/api/health
+
 ## Demo workflow
-1. Start the app.
-2. Click **Start simulator**. It posts simulated telemetry for 5 sample meters.
-3. Create a rule using a supported sentence, for example:
+1. Start the app and open **Overview**.
+2. Click **Simulate 5 CCMS** to generate live telemetry packets for five virtual electrical units (`ccms-01` to `ccms-05`).
+3. Open **Fault & Verify** in the sidebar to test link drops (`Drop Heartbeat` / `Reconnect & Recover`), `Replay Duplicate`, `Invalid Packet`, and `Relay Timeout` scenarios.
+4. Click **Run Verification Suite** in the top bar to execute all 5 automated protocol checks and view the Pass/Fail diagnostic report.
+5. Open **Rule studio** and create a rule using a supported sentence, for example:
    - `Alert when voltage is below 205 V`
    - `Alert when THD is above 5 percent`
    - `Alert when power factor is below 0.85`
    - `Alert when current is above 30 A`
-4. Save the rule, then use **Test rule** to evaluate recent telemetry plus generated samples.
-5. Inspect the trigger history.
+6. Save the rule, test it against synthetic readings, and inspect trigger events in **Alert history**.
 
 ## Natural-language rule grammar
 Supported pattern:
@@ -87,10 +86,14 @@ The backend validates the rule independently before saving or evaluating it.
 
 ## API overview
 - `GET /api/health`
+- `GET /api/diagnostics`
 - `GET /api/devices`
 - `POST /api/devices/bulk`
+- `POST /api/devices/:id/fault`
+- `POST /api/devices/:id/relay`
+- `POST /api/verify/run`
 - `GET /api/telemetry/latest`
-- `GET /api/telemetry/history?deviceId=meter-01&limit=100`
+- `GET /api/telemetry/history?deviceId=ccms-01&limit=100`
 - `POST /api/telemetry`
 - `GET /api/rules`
 - `POST /api/rules/parse`
@@ -101,9 +104,11 @@ The backend validates the rule independently before saving or evaluating it.
 ### Telemetry message example
 ```json
 {
-  "deviceId": "meter-01",
+  "messageId": "ccms-01-1731480000-101",
+  "deviceId": "ccms-01",
   "site": "Airoli Demo Campus",
   "feeder": "Feeder-A",
+  "relayState": "ON",
   "timestamp": "2026-11-13T06:30:00.000Z",
   "voltage": 228.4,
   "current": 12.7,
@@ -120,8 +125,7 @@ If a broker is running, set `MQTT_URL` and optionally `MQTT_TOPIC` in `.env`. Pu
 The topic suffix is used as a fallback device ID when `deviceId` is absent from the payload.
 
 ## Suggested next improvements
-- Add a real LLM provider behind a server-side interface, returning only the constrained DSL and requiring user confirmation.
-- Add rule versioning and audit logs.
+- Add an LLM provider behind a server-side interface returning only the constrained DSL with user confirmation.
+- Add persistent diagnostic event storage in MongoDB alongside telemetry collections.
 - Add role-based access control and per-site tenancy.
-- Add time-window rules, hysteresis and alert acknowledgement.
-- Add integration tests and a deployment pipeline.
+- Add time-window sliding rules, hysteresis, and alert acknowledgement.
